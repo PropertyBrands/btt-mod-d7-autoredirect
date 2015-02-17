@@ -1,0 +1,4 @@
+name = Autoredirect
+description = Detect when a page for a content type will 403/404 and redirect it to a specific URL
+core = 7.x
+package = SEO

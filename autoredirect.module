@@ -1,0 +1,84 @@
+<?php
+/**
+ * Implements hook_menu
+ */
+function autoredirect_menu() {
+  $items = array();
+  $items['autoredirect/403'] = array(
+    'title' => t('Access Denied'),
+    'page callback' => 'autoredirect_403',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter
+ */
+function autoredirect_form_system_site_information_settings_alter(&$form, &$form_state, $form_id) {
+  $site_403 = variable_get('site_403', '');
+  //Instructions element
+  $form['error_page']['autoredirect_instructions'] = array(
+    '#type' => 'markup',
+    '#prefix' => '<h5>Autoredirect Module has been installed!</h5>',
+    '#markup' => 'This module provides a mechanism for redirecting 403 pages',
+  );
+  $form['error_page']['autoredirect_instructions']['#markup'] .= ' which normally would not feature content.';
+  $form['error_page']['autoredirect_instructions']['#markup'] .= ' You can enable this feature by entering the path';
+  $form['error_page']['autoredirect_instructions']['#markup'] .= ' "autoredirect/403" for the 403 page.' ;
+  // 403 form processing
+  $form['error_page']['site_403']['#weight'] = 10;
+  //404 form processing
+  $form['error_page']['site_404']['#weight'] = 20;
+  // 403 redirects by content type
+  if($site_403 == 'autoredirect/403') {
+    $types = node_type_get_types();
+    $form['error_page']['autoredirect_403'] = array(
+      '#type' => 'fieldset',
+      '#collapsed' => TRUE,
+      '#collapsible' => TRUE,
+      '#title' => 'Autoredirect 403 Errors',
+      '#weight' => 15,
+    );
+    foreach($types as $type => $obj) {
+      $form['error_page']['autoredirect_403']['autoredirect_403_'.$type] = array(
+        '#type' => 'textfield',
+        '#title' => $obj->name,
+        '#description' => t('Redirect 403 pages to the following path.'),
+        '#default_value' => variable_get('autoredirect_403_'.$type, ''),
+      );
+    }
+  }
+}
+
+/**
+ * 403 Callback
+ */
+function autoredirect_403() {
+  if($obj = autoredirect_is_node()) {
+    $redirect_path = variable_get('autoredirect_403_'.$obj->type, '');
+    if(!empty($redirect_path)) {
+      unset($_GET['destination']);
+      $status_code = 302;
+      drupal_alter('autoredirect_403_status', $status_code, $obj, $redirect_path);
+      drupal_goto($redirect_path, array(), $status_code);
+    }
+  }
+  drupal_access_denied();
+}
+
+/**
+ * Helper for picking out node menu items
+ */
+function autoredirect_is_node() {
+  $prev = drupal_get_destination();
+  $item = menu_get_item($prev['destination']);
+  if($item['path'] === 'node/%') {
+    $node = node_load($item['original_map'][1]);
+    return $node;
+  } else {
+    return FALSE;
+  }
+}
