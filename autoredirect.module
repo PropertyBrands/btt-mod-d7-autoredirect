@@ -54,6 +54,40 @@ function autoredirect_form_system_site_information_settings_alter(&$form, &$form
 }
 
 /**
+ * Implements hook_form_FORM_ID_alter
+ */
+function autoredirect_form_node_type_form_alter(&$form, &$form_state, $form_id) {
+  $form['#submit'][] = 'autoredirect_404_variable_set';
+  $form['autoredirect'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Autoredirect Settings'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#group' => 'additional_settings',
+  );
+  if(!empty($form['#node_type']) && module_exists('redirect')) {
+    $form['autoredirect']['autoredirect_404_'.$form['#node_type']->type] = array(
+      '#type' => 'textfield',
+      '#title' => t('404 Redirect Path'),
+      '#description' => t('When nodes of this type are deleted, a redirect to this path will be created'),
+      '#default_value' => variable_get('autoredirect_404_'.$form['#node_type']->type, ''),
+    );
+  } else {
+    $form['autoredirect']['autoredirect_config_needed'] = array(
+      '#type' => 'markup',
+      '#markup' => t('Please save this content type and enable the redirect module to configure 404 handling.'),
+    );
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter
+ */
+function autoredirect_form_node_delete_confirm_alter(&$form, &$form_state, $form_id) {
+  $form['#submit'][] = 'autoredirect_404_generate';
+}
+
+/**
  * 403 Callback
  */
 function autoredirect_403() {
@@ -70,6 +104,16 @@ function autoredirect_403() {
 }
 
 /**
+ * Set variables for 404
+ */
+function autoredirect_404_variable_set(&$form, &$form_state) {
+  $type = 'autoredirect_404_'.$form['#node_type']->type;
+  if(!empty($form_state['values'][$type])) {
+    variable_set($type, $form_state['values'][$type]);
+  }
+}
+
+/**
  * Helper for picking out node menu items
  */
 function autoredirect_is_node() {
@@ -80,5 +124,23 @@ function autoredirect_is_node() {
     return $node;
   } else {
     return FALSE;
+  }
+}
+
+/**
+ * Implements hook_node_delete
+ */
+function autoredirect_404_generate(&$form, &$form_state) {
+  $node = $form['#node'];
+  $opt = variable_get('autoredirect_404_'.$node->type, '');
+  if(!empty($opt) && module_exists('redirect')) {
+    $redirect = new stdClass();
+    $source = redirect_parse_url('node/'.$node->nid);
+    $destination = redirect_parse_url($opt);
+    redirect_object_prepare($redirect);
+    $redirect->source = $source['url'];
+    $redirect->redirect = $destination['url'];
+    redirect_save($redirect);
+    drupal_set_message('Redirect created for: '.$node->title, 'status');
   }
 }
